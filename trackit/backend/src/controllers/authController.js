@@ -5,30 +5,28 @@ const QRCode = require('qrcode');
 const User = require('../models/User');
 const RefreshToken = require('../models/RefreshToken');
 const { sendSuccess, sendError } = require('../utils/response');
-const { 
-  sendVerificationEmail, 
-  sendWelcomeEmail, 
+const {
+  sendVerificationEmail,
+  sendWelcomeEmail,
   sendPasswordResetEmail,
-  sendLoginAlertEmail 
+  sendLoginAlertEmail
 } = require('../services/emailService');
 
 // Generate tokens
 const generateTokens = async (user, deviceInfo) => {
-  // Access token (short lived)
   const accessToken = jwt.sign(
     { id: user._id, email: user.email },
     process.env.JWT_SECRET,
     { expiresIn: '15m' }
   );
-  
-  // Refresh token (long lived)
+
   const refreshToken = await RefreshToken.create({
     user: user._id,
     token: RefreshToken.generateToken(),
-    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
+    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     deviceInfo
   });
-  
+
   return { accessToken, refreshToken: refreshToken.token };
 };
 
@@ -44,13 +42,13 @@ const register = async (req, res) => {
   try {
     const { name, email, password } = req.body;
     const clientInfo = getClientInfo(req);
-    
+
     // Check existing user
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return sendError(res, 'User already exists', 400);
     }
-    
+
     // Create user
     const user = await User.create({
       name,
@@ -58,30 +56,26 @@ const register = async (req, res) => {
       password,
       ipAddressAtSignup: clientInfo.ip
     });
-    
+
     // Generate verification token
     const verificationToken = user.generateEmailVerificationToken();
     await user.save();
-    
-    // Send verification email (don't wait for response)
-    sendVerificationEmail(user.email, user.name, verificationToken).catch(err => 
+
+    // Send verification email
+    sendVerificationEmail(user.email, user.name, verificationToken).catch(err =>
       console.error('Email sending failed:', err)
     );
-    
-    // Generate tokens
-    const { accessToken, refreshToken } = await generateTokens(user, clientInfo);
-    
+
+    // ✅ No tokens returned - user must verify email first
     sendSuccess(res, {
       user: {
         id: user._id,
         name: user.name,
         email: user.email,
-        emailVerified: user.emailVerified
-      },
-      accessToken,
-      refreshToken
+        emailVerified: user.emailVerified // false
+      }
     }, 'Registration successful. Please verify your email.', 201);
-    
+
   } catch (error) {
     console.error('Registration error:', error);
     sendError(res, 'Registration failed', 500, error);
@@ -92,25 +86,25 @@ const register = async (req, res) => {
 const verifyEmail = async (req, res) => {
   try {
     const { token } = req.params;
-    
+
     const user = await User.findByEmailVerificationToken(token);
-    
+
     if (!user) {
       return sendError(res, 'Invalid or expired verification token', 400);
     }
-    
+
     user.emailVerified = true;
     user.emailVerificationToken = undefined;
     user.emailVerificationExpires = undefined;
     await user.save();
-    
+
     // Send welcome email
-    sendWelcomeEmail(user.email, user.name).catch(err => 
+    sendWelcomeEmail(user.email, user.name).catch(err =>
       console.error('Welcome email failed:', err)
     );
-    
+
     sendSuccess(res, null, 'Email verified successfully! You can now login.');
-    
+
   } catch (error) {
     console.error('Verification error:', error);
     sendError(res, 'Verification failed', 500, error);
@@ -121,24 +115,24 @@ const verifyEmail = async (req, res) => {
 const resendVerification = async (req, res) => {
   try {
     const { email } = req.body;
-    
+
     const user = await User.findOne({ email });
-    
+
     if (!user) {
       return sendError(res, 'User not found', 404);
     }
-    
+
     if (user.emailVerified) {
       return sendError(res, 'Email already verified', 400);
     }
-    
+
     const verificationToken = user.generateEmailVerificationToken();
     await user.save();
-    
+
     await sendVerificationEmail(user.email, user.name, verificationToken);
-    
+
     sendSuccess(res, null, 'Verification email sent');
-    
+
   } catch (error) {
     console.error('Resend verification error:', error);
     sendError(res, 'Failed to send verification email', 500, error);
@@ -150,9 +144,9 @@ const login = async (req, res) => {
   try {
     const { email, password, twoFactorCode } = req.body;
     const clientInfo = getClientInfo(req);
-    
+
     const user = await User.findOne({ email }).select('+password');
-    
+
     if (!user || !(await user.comparePassword(password))) {
       await User.findOneAndUpdate(
         { email },
@@ -160,45 +154,50 @@ const login = async (req, res) => {
       );
       return sendError(res, 'Invalid credentials', 401);
     }
-    
+
     if (!user.isActive) {
       return sendError(res, 'Account deactivated. Contact support.', 403);
     }
-    
+
+    // ✅ Block login if email not verified
+    if (!user.emailVerified) {
+      return sendError(res, 'Please verify your email before logging in. Check your inbox.', 403);
+    }
+
     // Check 2FA
     if (user.twoFactorEnabled) {
       if (!twoFactorCode) {
         return sendError(res, '2FA code required', 401, null, { requiresTwoFactor: true });
       }
-      
+
       const verified = speakeasy.totp.verify({
         secret: user.twoFactorSecret,
         encoding: 'base32',
         token: twoFactorCode
       });
-      
+
       if (!verified) {
         return sendError(res, 'Invalid 2FA code', 401);
       }
     }
-    
+
     // Send login alert if enabled
     if (user.preferences.loginAlerts) {
       sendLoginAlertEmail(
-        user.email, 
-        user.name, 
-        clientInfo.ip, 
+        user.email,
+        user.name,
+        clientInfo.ip,
         clientInfo.deviceName,
         new Date().toISOString()
       ).catch(err => console.error('Login alert email failed:', err));
     }
-    
+
     // Add login history
     await user.addLoginHistory(clientInfo.ip, clientInfo.userAgent, true);
-    
+
     // Generate tokens
     const { accessToken, refreshToken } = await generateTokens(user, clientInfo);
-    
+
     sendSuccess(res, {
       user: {
         id: user._id,
@@ -212,7 +211,7 @@ const login = async (req, res) => {
       accessToken,
       refreshToken
     }, 'Login successful');
-    
+
   } catch (error) {
     console.error('Login error:', error);
     sendError(res, 'Login failed', 500, error);
@@ -224,32 +223,29 @@ const refreshToken = async (req, res) => {
   try {
     const { refreshToken: token } = req.body;
     const clientInfo = getClientInfo(req);
-    
+
     const refreshTokenDoc = await RefreshToken.findOne({ token, revoked: false });
-    
+
     if (!refreshTokenDoc || refreshTokenDoc.isExpired()) {
       return sendError(res, 'Invalid or expired refresh token', 401);
     }
-    
+
     const user = await User.findById(refreshTokenDoc.user);
-    
+
     if (!user) {
       return sendError(res, 'User not found', 401);
     }
-    
-    // Update token usage
+
     refreshTokenDoc.lastUsedAt = new Date();
     refreshTokenDoc.usedCount += 1;
     await refreshTokenDoc.save();
-    
-    // Generate new tokens
+
     const tokens = await generateTokens(user, clientInfo);
-    
-    // Revoke old refresh token
+
     await refreshTokenDoc.revoke('refreshed');
-    
+
     sendSuccess(res, tokens, 'Tokens refreshed');
-    
+
   } catch (error) {
     console.error('Refresh token error:', error);
     sendError(res, 'Failed to refresh tokens', 500, error);
@@ -260,16 +256,16 @@ const refreshToken = async (req, res) => {
 const logout = async (req, res) => {
   try {
     const { refreshToken: token } = req.body;
-    
+
     if (token) {
       const refreshTokenDoc = await RefreshToken.findOne({ token });
       if (refreshTokenDoc) {
         await refreshTokenDoc.revoke('user_logout');
       }
     }
-    
+
     sendSuccess(res, null, 'Logged out successfully');
-    
+
   } catch (error) {
     console.error('Logout error:', error);
     sendError(res, 'Logout failed', 500, error);
@@ -280,21 +276,20 @@ const logout = async (req, res) => {
 const forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
-    
+
     const user = await User.findOne({ email });
-    
+
     if (!user) {
-      // Don't reveal that user doesn't exist (security)
       return sendSuccess(res, null, 'If your email is registered, you will receive a reset link');
     }
-    
+
     const resetToken = user.generatePasswordResetToken();
     await user.save();
-    
+
     await sendPasswordResetEmail(user.email, user.name, resetToken);
-    
+
     sendSuccess(res, null, 'Password reset email sent');
-    
+
   } catch (error) {
     console.error('Forgot password error:', error);
     sendError(res, 'Failed to send reset email', 500, error);
@@ -305,26 +300,25 @@ const forgotPassword = async (req, res) => {
 const resetPassword = async (req, res) => {
   try {
     const { token, newPassword } = req.body;
-    
+
     const user = await User.findByPasswordResetToken(token);
-    
+
     if (!user) {
       return sendError(res, 'Invalid or expired reset token', 400);
     }
-    
+
     user.password = newPassword;
     user.passwordResetToken = undefined;
     user.passwordResetExpires = undefined;
     await user.save();
-    
-    // Revoke all refresh tokens for this user
+
     await RefreshToken.updateMany(
       { user: user._id, revoked: false },
       { revoked: true, revokedReason: 'password_changed' }
     );
-    
+
     sendSuccess(res, null, 'Password reset successful. Please login with your new password.');
-    
+
   } catch (error) {
     console.error('Reset password error:', error);
     sendError(res, 'Failed to reset password', 500, error);
@@ -335,25 +329,25 @@ const resetPassword = async (req, res) => {
 const setupTwoFactor = async (req, res) => {
   try {
     const user = req.user;
-    
+
     const secret = speakeasy.generateSecret({
       name: `TrackIt:${user.email}`
     });
-    
+
     user.twoFactorSecret = secret.base32;
     await user.save();
-    
+
     const qrCodeUrl = await QRCode.toDataURL(secret.otpauth_url);
-    
+
     const backupCodes = user.generateBackupCodes();
     await user.save();
-    
+
     sendSuccess(res, {
       qrCode: qrCodeUrl,
       secret: secret.base32,
       backupCodes
     }, '2FA setup initiated. Scan QR code with Google Authenticator.');
-    
+
   } catch (error) {
     console.error('2FA setup error:', error);
     sendError(res, 'Failed to setup 2FA', 500, error);
@@ -365,22 +359,22 @@ const verifyTwoFactor = async (req, res) => {
   try {
     const { code } = req.body;
     const user = req.user;
-    
+
     const verified = speakeasy.totp.verify({
       secret: user.twoFactorSecret,
       encoding: 'base32',
       token: code
     });
-    
+
     if (!verified) {
       return sendError(res, 'Invalid 2FA code', 400);
     }
-    
+
     user.twoFactorEnabled = true;
     await user.save();
-    
+
     sendSuccess(res, null, '2FA enabled successfully');
-    
+
   } catch (error) {
     console.error('2FA verification error:', error);
     sendError(res, 'Failed to verify 2FA', 500, error);
@@ -392,24 +386,24 @@ const disableTwoFactor = async (req, res) => {
   try {
     const { code } = req.body;
     const user = req.user;
-    
+
     const verified = speakeasy.totp.verify({
       secret: user.twoFactorSecret,
       encoding: 'base32',
       token: code
     });
-    
+
     if (!verified) {
       return sendError(res, 'Invalid 2FA code', 400);
     }
-    
+
     user.twoFactorEnabled = false;
     user.twoFactorSecret = undefined;
     user.twoFactorBackupCodes = [];
     await user.save();
-    
+
     sendSuccess(res, null, '2FA disabled successfully');
-    
+
   } catch (error) {
     console.error('2FA disable error:', error);
     sendError(res, 'Failed to disable 2FA', 500, error);

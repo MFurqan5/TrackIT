@@ -39,7 +39,7 @@ const loadTemplate = (templateName, data) => {
 
 // Send verification email
 const sendVerificationEmail = async (email, name, token) => {
-  const verificationUrl = `${process.env.BACKEND_URL}/verify-email?token=${token}`;
+  const verificationUrl = `${process.env.BACKEND_URL}/api/v1/auth/verify-email/${token}`;
   
   const html = loadTemplate('verificationEmail', {
     name,
