@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { text-align: center; padding: 20px; background: #4F46E5; color: white; }
+    .button { display: inline-block; padding: 12px 24px; background: #4F46E5; color: white; text-decoration: none; border-radius: 5px; margin: 20px 0; }
+    .footer { text-align: center; padding: 20px; font-size: 12px; color: #666; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>TrackIt</h1>
+    </div>
+    
+    <h2>Hello {{name}},</h2>
+    
+    <p>Thank you for signing up for TrackIt! Please verify your email address to get started.</p>
+    
+    <div style="text-align: center;">
+      <a href="{{verificationUrl}}" class="button">Verify Email Address</a>
+    </div>
+    
+    <p>Or copy and paste this link:</p>
+    <p>{{verificationUrl}}</p>
+    
+    <p>This link will expire in 24 hours.</p>
+    
+    <p>If you didn't create an account, please ignore this email.</p>
+    
+    <div class="footer">
+      <p>&copy; {{year}} TrackIt. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>
