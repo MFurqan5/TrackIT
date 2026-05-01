@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const { sendSuccess, sendError } = require('../utils/response');
 
 // Generate JWT Token
 const generateToken = (id) => {
@@ -8,117 +9,147 @@ const generateToken = (id) => {
   });
 };
 
-// Register user
+// Get client IP address
+const getClientIP = (req) => {
+  return req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+};
+
+// Get user agent
+const getUserAgent = (req) => {
+  return req.headers['user-agent'] || 'Unknown';
+};
+
+// @desc    Register user
+// @route   POST /api/v1/auth/register
+// @access  Public
 const register = async (req, res) => {
   try {
     const { name, email, password } = req.body;
 
-    console.log('Registration attempt:', { name, email });
+    console.log(`📝 Registration attempt: ${email}`);
 
     // Check if user exists
     const userExists = await User.findOne({ email });
     if (userExists) {
-      return res.status(400).json({
-        success: false,
-        message: 'User already exists'
-      });
+      console.log(`❌ Registration failed: ${email} already exists`);
+      return sendError(res, 'User already exists', 400);
     }
 
-    // Create user
+    // Create user with login history in one go
     const user = await User.create({
       name,
       email,
-      password
+      password,
+      lastLoginIP: getClientIP(req),
+      loginHistory: [{
+        timestamp: new Date(),
+        ip: getClientIP(req),
+        userAgent: getUserAgent(req)
+      }]
     });
-
-    console.log('User created:', user._id);
 
     // Generate token
     const token = generateToken(user._id);
 
-    res.status(201).json({
-      success: true,
-      data: {
-        _id: user._id,
-        name: user.name,
-        email: user.email,
-        currency: user.currency,
-        token
-      }
-    });
+    console.log(`✅ User registered successfully: ${email}`);
+
+    sendSuccess(res, {
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      currency: user.currency,
+      subscriptionTier: user.subscriptionTier,
+      token
+    }, 'User registered successfully', 201);
+    
   } catch (error) {
-    console.error('Registration error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error',
-      error: error.message
-    });
+    console.error(`❌ Registration error: ${error.message}`);
+    sendError(res, 'Registration failed', 500, error);
   }
 };
 
-// Login user
+// @desc    Login user
+// @route   POST /api/v1/auth/login
+// @access  Public
 const login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    console.log('Login attempt:', { email });
+    console.log(`🔐 Login attempt: ${email}`);
 
-    // Find user
-    const user = await User.findOne({ email });
+    // Find user with password field
+    const user = await User.findOne({ email }).select('+password');
 
     if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid credentials'
-      });
+      console.log(`❌ Login failed: ${email} not found`);
+      return sendError(res, 'Invalid credentials', 401);
+    }
+
+    // Check if account is active
+    if (!user.isActive) {
+      console.log(`❌ Login failed: ${email} account deactivated`);
+      return sendError(res, 'Account deactivated. Contact support.', 401);
     }
 
     // Check password
     const isPasswordMatch = await user.comparePassword(password);
-
     if (!isPasswordMatch) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid credentials'
-      });
+      console.log(`❌ Login failed: ${email} wrong password`);
+      return sendError(res, 'Invalid credentials', 401);
     }
+
+    // Update last login info
+    user.lastLogin = new Date();
+    user.lastLoginIP = getClientIP(req);
+    user.loginHistory.push({
+      timestamp: new Date(),
+      ip: getClientIP(req),
+      userAgent: getUserAgent(req)
+    });
+    
+    // Keep only last 50 login records
+    if (user.loginHistory.length > 50) {
+      user.loginHistory = user.loginHistory.slice(-50);
+    }
+    
+    await user.save(); // ✅ safe here - password not modified
 
     // Generate token
     const token = generateToken(user._id);
 
-    res.status(200).json({
-      success: true,
-      data: {
-        _id: user._id,
-        name: user.name,
-        email: user.email,
-        currency: user.currency,
-        token
-      }
-    });
+    console.log(`✅ User logged in: ${email}`);
+
+    sendSuccess(res, {
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      currency: user.currency,
+      subscriptionTier: user.subscriptionTier,
+      preferences: user.preferences,
+      token
+    }, 'Login successful', 200);
+    
   } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error',
-      error: error.message
-    });
+    console.error(`❌ Login error: ${error.message}`);
+    sendError(res, 'Login failed', 500, error);
   }
 };
 
-// Get current user
+// @desc    Get current user
+// @route   GET /api/v1/auth/me
+// @access  Private
 const getMe = async (req, res) => {
   try {
-    res.status(200).json({
-      success: true,
-      data: req.user
-    });
+    const user = await User.findById(req.user._id).select('-password');
+    
+    if (!user) {
+      return sendError(res, 'User not found', 404);
+    }
+    
+    sendSuccess(res, user, 'User profile retrieved');
   } catch (error) {
-    console.error(error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error'
-    });
+    console.error(`❌ Get user error: ${error.message}`);
+    sendError(res, 'Failed to get user profile', 500, error);
   }
 };
 

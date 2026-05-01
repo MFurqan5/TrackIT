@@ -1,10 +1,18 @@
 const express = require('express');
 const dotenv = require('dotenv');
 const cors = require('cors');
+const helmet = require('helmet');
+const morgan = require('morgan');
 const connectDB = require('./src/config/database');
+const validateEnv = require('./src/config/validateEnv');
+const { generalLimiter } = require('./src/middleware/rateLimiter');
+const { sendError } = require('./src/utils/response');
 
 // Load environment variables
 dotenv.config();
+
+// Validate environment variables
+validateEnv();
 
 // Connect to database
 connectDB();
@@ -12,37 +20,117 @@ connectDB();
 // Create express app
 const app = express();
 
-// Middleware
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+//SECURITY MIDDLEWARE
+app.use(helmet()); // Security headers
 
-// Import routes
+// CORS CONFIGURATION
+app.use(cors({
+  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  credentials: true,
+  optionsSuccessStatus: 200
+}));
+
+// LOGGING
+app.use(morgan('combined')); // HTTP request logging
+
+// BODY PARSERS
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// RATE LIMITING
+app.use('/api', generalLimiter); // Apply to all API routes
+
+// API ROUTES
 const authRoutes = require('./src/routes/authRoutes');
 
-// Use routes
+// Versioned API routes
+app.use(`/api/${process.env.API_VERSION}/auth`, authRoutes);
+// Also support unversioned routes (backward compatibility)
 app.use('/api/auth', authRoutes);
 
-// Home route
+// HEALTH CHECK
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'OK',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    environment: process.env.NODE_ENV,
+    version: process.env.API_VERSION
+  });
+});
+
+// HOME ROUTE
 app.get('/', (req, res) => {
-  res.json({
-    message: 'TrackIt API is running!',
-    version: '1.0.0'
+  res.status(200).json({
+    name: 'TrackIt API',
+    version: process.env.API_VERSION,
+    status: 'running',
+    documentation: '/api-docs',
+    endpoints: {
+      health: 'GET /health',
+      auth: {
+        register: `POST /api/${process.env.API_VERSION}/auth/register`,
+        login: `POST /api/${process.env.API_VERSION}/auth/login`,
+        me: `GET /api/${process.env.API_VERSION}/auth/me`
+      }
+    },
+    timestamp: new Date().toISOString()
   });
 });
 
-// Error handler
+// 404 HANDLER
+app.use((req, res) => {
+  sendError(res, `Route ${req.method} ${req.url} not found`, 404);
+});
+
+// GLOBAL ERROR HANDLER
 app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({
-    success: false,
-    message: err.message || 'Something went wrong!'
-  });
+  console.error(`❌ Unhandled error: ${err.stack}`);
+  sendError(res, err.message || 'Internal server error', 500, err);
 });
 
-// Start server
+// START SERVER
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
-  console.log(`📝 Environment: ${process.env.NODE_ENV}`);
+const server = app.listen(PORT, () => {
+  console.log(`
+╔══════════════════════════════════════════════════════════╗
+║                                                          ║
+║   🚀 TrackIt API Server Running                          ║
+║                                                           ║
+║   📡 Port: ${PORT}                                       ║
+║   🌍 Environment: ${process.env.NODE_ENV}                ║
+║   🔗 URL: http://localhost:${PORT}                       ║
+║   📦 API Version: ${process.env.API_VERSION}             ║
+║                                                          ║
+╚══════════════════════════════════════════════════════════╝
+  `);
 });
+
+// GRACEFUL SHUTDOWN
+const gracefulShutdown = () => {
+  console.log('⚠️ Received shutdown signal. Closing server...');
+  
+  server.close(async () => {
+    console.log('✅ Server closed');
+    
+    try {
+      await mongoose.connection.close(false);
+      console.log('✅ MongoDB connection closed');
+      process.exit(0);
+    } catch (error) {
+      console.error('❌ Error closing MongoDB connection:', error);
+      process.exit(1);
+    }
+  });
+  
+  // Force close after 10 seconds if not closed
+  setTimeout(() => {
+    console.error('❌ Could not close connections in time. Forcefully shutting down.');
+    process.exit(1);
+  }, 10000);
+};
+
+process.on('SIGTERM', gracefulShutdown);
+process.on('SIGINT', gracefulShutdown);
+
+module.exports = { app, server };
