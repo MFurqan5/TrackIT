@@ -24,8 +24,7 @@ const createTransaction = async (req, res) => {
       return sendError(res, 'Please provide all required fields', 400);
     }
 
-    // Create transaction
-    const transaction = await Transaction.create({
+    const transactionData = {
       user: req.user._id,
       description,
       amount,
@@ -36,9 +35,15 @@ const createTransaction = async (req, res) => {
       notes: notes || '',
       tags: tags || [],
       paymentMethod: paymentMethod || 'other',
-      location: location || null,
       currency: currency || req.user.currency || 'USD'
-    });
+    };
+
+    if (location) {
+      transactionData.location = location;
+    }
+
+    // Create transaction
+    const transaction = await Transaction.create(transactionData);
 
     // Check budget alert (only for expenses)
     let budgetAlert = null;

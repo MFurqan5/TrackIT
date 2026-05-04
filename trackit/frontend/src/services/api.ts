@@ -51,11 +51,7 @@ api.interceptors.response.use(
         return Promise.reject(refreshError);
       }
     }
-    
-    // Show error toast
-    const message = error.response?.data?.message || 'Something went wrong';
-    toast.error(message);
-    
+
     return Promise.reject(error);
   }
 );
