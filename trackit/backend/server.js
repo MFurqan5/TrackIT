@@ -10,6 +10,7 @@ const { sendError } = require('./src/utils/response');
 const transactionRoutes = require('./src/routes/transactionRoutes');
 const budgetRoutes = require('./src/routes/budgetRoutes');
 const analyticsRoutes = require('./src/routes/analyticsRoutes');
+const userRoutes = require('./src/routes/userRoutes');
 
 // Load environment variables
 dotenv.config();
@@ -51,6 +52,7 @@ app.use(`/api/${process.env.API_VERSION}/auth`, authRoutes);
 app.use(`/api/${process.env.API_VERSION}/transactions`, transactionRoutes);
 app.use(`/api/${process.env.API_VERSION}/budgets`, budgetRoutes);
 app.use(`/api/${process.env.API_VERSION}/analytics`, analyticsRoutes);
+app.use(`/api/${process.env.API_VERSION}/users`, userRoutes);
 // Also support unversioned routes (backward compatibility)
 app.use('/api/auth', authRoutes);
 

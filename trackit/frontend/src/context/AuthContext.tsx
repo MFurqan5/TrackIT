@@ -5,6 +5,7 @@ import { User } from '../types';
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
+  refetchUser: () => Promise<User | undefined>;
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -16,23 +17,37 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    checkAuth();
-  }, []);
-
   const checkAuth = async () => {
     const token = localStorage.getItem('accessToken');
     if (token) {
       try {
         const response = await authService.getMe();
+        console.log('CheckAuth - User data:', response.data); // Debug log
         setUser(response.data);
       } catch (error) {
+        console.error('CheckAuth error:', error);
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
       }
     }
     setIsLoading(false);
   };
+
+  const refetchUser = async () => {
+    try {
+      console.log('Refetching user data...'); // Debug log
+      const response = await authService.getMe();
+      console.log('Refetched user data:', response.data); // Debug log
+      setUser(response.data); // This should update the UI
+      return response.data;
+    } catch (error) {
+      console.error('Failed to refetch user:', error);
+    }
+  };
+
+  useEffect(() => {
+    checkAuth();
+  }, []);
 
   const login = async (email: string, password: string) => {
     const response = await authService.login(email, password);
@@ -56,7 +71,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, refetchUser, login, register, logout }}>
       {children}
     </AuthContext.Provider>
   );

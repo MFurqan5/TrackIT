@@ -1,5 +1,5 @@
 import api from './api';
-import { AuthResponse } from '../types';
+import { AuthResponse, ApiResponse, User } from '../types';
 
 export const authService = {
   register: async (name: string, email: string, password: string) => {
@@ -20,17 +20,22 @@ export const authService = {
   },
   
   verifyEmail: async (token: string) => {
-    const response = await api.get(`/auth/verify-email/${token}`);
+    const response = await api.get<ApiResponse<null>>(`/auth/verify-email/${token}`);
+    return response.data;
+  },
+  
+  resendVerification: async (email: string) => {
+    const response = await api.post<ApiResponse<null>>('/auth/resend-verification', { email });
     return response.data;
   },
   
   forgotPassword: async (email: string) => {
-    const response = await api.post('/auth/forgot-password', { email });
+    const response = await api.post<ApiResponse<null>>('/auth/forgot-password', { email });
     return response.data;
   },
   
   resetPassword: async (token: string, newPassword: string) => {
-    const response = await api.post('/auth/reset-password', {
+    const response = await api.post<ApiResponse<null>>('/auth/reset-password', {
       token,
       newPassword,
     });
@@ -39,13 +44,20 @@ export const authService = {
   
   logout: async () => {
     const refreshToken = localStorage.getItem('refreshToken');
-    await api.post('/auth/logout', { refreshToken });
+    const response = await api.post<ApiResponse<null>>('/auth/logout', { refreshToken });
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
+    return response.data;
   },
   
   getMe: async () => {
-    const response = await api.get('/auth/me');
+    const response = await api.get<ApiResponse<User>>('/auth/me');
+    return response.data;
+  },
+  
+  refreshToken: async () => {
+    const refreshToken = localStorage.getItem('refreshToken');
+    const response = await api.post<AuthResponse>('/auth/refresh-token', { refreshToken });
     return response.data;
   },
 };
