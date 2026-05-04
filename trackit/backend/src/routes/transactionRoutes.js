@@ -9,9 +9,6 @@ const {
   getTransactionSummary
 } = require('../controllers/transactionController');
 const { protect } = require('../middleware/auth');
-const { uploadReceipt } = require('../middleware/upload');
-const { exportCSV, exportExcel, exportPDF } = require('../controllers/exportController');
-const { createRecurring, getRecurring, updateRecurring, deleteRecurring } = require('../controllers/recurringController');
 
 const router = express.Router();
 
@@ -21,15 +18,7 @@ router.use(protect);
 // Transaction CRUD
 router.route('/')
   .get(getTransactions)
-  .post(uploadReceipt, createTransaction);
-
-router.get('/export/csv', exportCSV);
-router.get('/export/excel', exportExcel);
-router.get('/export/pdf', exportPDF);
-router.post('/recurring', createRecurring);
-router.get('/recurring', getRecurring);
-router.put('/recurring/:id', updateRecurring);
-router.delete('/recurring/:id', deleteRecurring);
+  .post(createTransaction);
 
 router.get('/summary', getTransactionSummary);
 router.post('/bulk-delete', bulkDeleteTransactions);
