@@ -7,6 +7,9 @@ const connectDB = require('./src/config/database');
 const validateEnv = require('./src/config/validateEnv');
 const { generalLimiter } = require('./src/middleware/rateLimiter');
 const { sendError } = require('./src/utils/response');
+const transactionRoutes = require('./src/routes/transactionRoutes');
+const budgetRoutes = require('./src/routes/budgetRoutes');
+const analyticsRoutes = require('./src/routes/analyticsRoutes');
 
 // Load environment variables
 dotenv.config();
@@ -45,6 +48,9 @@ const authRoutes = require('./src/routes/authRoutes');
 
 // Versioned API routes
 app.use(`/api/${process.env.API_VERSION}/auth`, authRoutes);
+app.use(`/api/${process.env.API_VERSION}/transactions`, transactionRoutes);
+app.use(`/api/${process.env.API_VERSION}/budgets`, budgetRoutes);
+app.use(`/api/${process.env.API_VERSION}/analytics`, analyticsRoutes);
 // Also support unversioned routes (backward compatibility)
 app.use('/api/auth', authRoutes);
 
