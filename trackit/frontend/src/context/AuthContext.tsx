@@ -5,7 +5,8 @@ import { User } from '../types';
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
-  refetchUser: () => Promise<User | undefined>;
+  refetchUser: () => Promise<void>;
+  updateUser: (user: User) => void;
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -17,35 +18,55 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Load user from localStorage on app start
+  const loadUserFromStorage = () => {
+    const storedUser = localStorage.getItem('user');
+    if (storedUser) {
+      try {
+        const parsedUser = JSON.parse(storedUser);
+        setUser(parsedUser);
+      } catch (e) {
+        console.error('Failed to parse stored user:', e);
+      }
+    }
+  };
+
   const checkAuth = async () => {
     const token = localStorage.getItem('accessToken');
     if (token) {
       try {
         const response = await authService.getMe();
-        console.log('CheckAuth - User data:', response.data); // Debug log
         setUser(response.data);
+        localStorage.setItem('user', JSON.stringify(response.data));
       } catch (error) {
-        console.error('CheckAuth error:', error);
+        console.error('Auth error:', error);
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
+        localStorage.removeItem('user');
       }
+    } else {
+      loadUserFromStorage();
     }
     setIsLoading(false);
   };
 
   const refetchUser = async () => {
     try {
-      console.log('Refetching user data...'); // Debug log
       const response = await authService.getMe();
-      console.log('Refetched user data:', response.data); // Debug log
-      setUser(response.data); // This should update the UI
-      return response.data;
+      setUser(response.data);
+      localStorage.setItem('user', JSON.stringify(response.data));
     } catch (error) {
-      console.error('Failed to refetch user:', error);
+      console.error('Refetch error:', error);
     }
   };
 
+  const updateUser = (updatedUser: User) => {
+    setUser(updatedUser);
+    localStorage.setItem('user', JSON.stringify(updatedUser));
+  };
+
   useEffect(() => {
+    loadUserFromStorage();
     checkAuth();
   }, []);
 
@@ -54,6 +75,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const { user, accessToken, refreshToken } = response.data;
     localStorage.setItem('accessToken', accessToken);
     localStorage.setItem('refreshToken', refreshToken);
+    localStorage.setItem('user', JSON.stringify(user));
     setUser(user);
   };
 
@@ -62,16 +84,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const { user, accessToken, refreshToken } = response.data;
     localStorage.setItem('accessToken', accessToken);
     localStorage.setItem('refreshToken', refreshToken);
+    localStorage.setItem('user', JSON.stringify(user));
     setUser(user);
   };
 
   const logout = async () => {
     await authService.logout();
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken');
+    localStorage.removeItem('user');
     setUser(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, refetchUser, login, register, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, refetchUser, updateUser, login, register, logout }}>
       {children}
     </AuthContext.Provider>
   );

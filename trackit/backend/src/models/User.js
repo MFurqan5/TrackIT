@@ -240,7 +240,7 @@ userSchema.methods.incrementApiCalls = async function() {
 
 // Check if can make API call
 userSchema.methods.canMakeApiCall = function() {
-  const limits = { free: 100, premium: 10000, enterprise: 100000 };
+  const limits = { free: 1000, premium: 10000, enterprise: 100000 };
   const limit = limits[this.subscriptionTier] || 100;
   return this.apiCallsToday < limit;
 };

@@ -1,20 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { userService } from '../services/userService';
 import { useAuth } from '../hooks/useAuth';
 import { formatCurrency } from '../utils/formatters';
 import toast from 'react-hot-toast';
 
 const Profile: React.FC = () => {
-  const { user, logout, refetchUser } = useAuth();
+  const { user, logout, refetchUser, updateUser } = useAuth();
   const queryClient = useQueryClient();
   const [isEditing, setIsEditing] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [isSetup2FA, setIsSetup2FA] = useState(false);
   const [qrCode, setQrCode] = useState('');
   const [backupCodes, setBackupCodes] = useState<string[]>([]);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   
-  // Initialize form data from user - update when user changes
   const [formData, setFormData] = useState({
     name: '',
     phoneNumber: '',
@@ -30,7 +31,7 @@ const Profile: React.FC = () => {
   });
   const [twoFACode, setTwoFACode] = useState('');
 
-  // Update form data when user data loads
+  // Update form when user changes
   useEffect(() => {
     if (user) {
       setFormData({
@@ -40,24 +41,21 @@ const Profile: React.FC = () => {
         monthlyIncome: user.monthlyIncome?.toString() || '',
         financialGoal: user.financialGoal || 'Save Money',
       });
+      setAvatarPreview(user.avatar || null);
     }
   }, [user]);
 
   // Update profile mutation
   const updateProfileMutation = useMutation({
     mutationFn: (data: any) => userService.updateProfile(data),
-    onSuccess: async (response) => {
-      // Refetch user data from server
+    onSuccess: async () => {
       await refetchUser();
-      
-      // Also invalidate React Query cache
       queryClient.invalidateQueries({ queryKey: ['user'] });
-      
+      queryClient.invalidateQueries({ queryKey: ['auth'] });
       setIsEditing(false);
       toast.success('Profile updated successfully!');
     },
     onError: (error: any) => {
-      console.error('Update error:', error);
       toast.error(error.response?.data?.message || 'Failed to update profile');
     },
   });
@@ -80,8 +78,8 @@ const Profile: React.FC = () => {
   const setup2FAMutation = useMutation({
     mutationFn: () => userService.setup2FA(),
     onSuccess: (data: any) => {
-      setQrCode(data.data.qrCode);
-      setBackupCodes(data.data.backupCodes);
+      setQrCode(data.data?.qrCode || data.qrCode);
+      setBackupCodes(data.data?.backupCodes || data.backupCodes || []);
       setIsSetup2FA(true);
     },
     onError: (error: any) => {
@@ -97,7 +95,7 @@ const Profile: React.FC = () => {
       setQrCode('');
       setBackupCodes([]);
       setTwoFACode('');
-      await refetchUser(); // Refresh user data to show 2FA enabled
+      await refetchUser();
       queryClient.invalidateQueries({ queryKey: ['user'] });
       toast.success('2FA enabled successfully');
     },
@@ -110,7 +108,7 @@ const Profile: React.FC = () => {
   const disable2FAMutation = useMutation({
     mutationFn: (code: string) => userService.disable2FA(code),
     onSuccess: async () => {
-      await refetchUser(); // Refresh user data to show 2FA disabled
+      await refetchUser();
       queryClient.invalidateQueries({ queryKey: ['user'] });
       toast.success('2FA disabled successfully');
     },
@@ -119,12 +117,29 @@ const Profile: React.FC = () => {
     },
   });
 
+  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setAvatarFile(file);
+      setAvatarPreview(URL.createObjectURL(file));
+    }
+  };
+
+  const handleSaveAvatar = () => {
+    if (avatarFile && user) {
+      const localAvatarUrl = avatarPreview;
+      const updatedUser = { ...user, avatar: localAvatarUrl };
+      updateUser(updatedUser);
+      toast.success('Profile picture updated!');
+      setAvatarFile(null);
+    }
+  };
+
   const handleProfileSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    const updateData: any = {};
+    const updateData: Record<string, any> = {};
     
-    // Only send fields that have changed
     if (formData.name !== user?.name) updateData.name = formData.name;
     if (formData.phoneNumber !== user?.phoneNumber) updateData.phoneNumber = formData.phoneNumber;
     if (formData.occupation !== user?.occupation) updateData.occupation = formData.occupation;
@@ -132,8 +147,6 @@ const Profile: React.FC = () => {
     
     const monthlyIncomeNum = formData.monthlyIncome ? parseFloat(formData.monthlyIncome) : undefined;
     if (monthlyIncomeNum !== user?.monthlyIncome) updateData.monthlyIncome = monthlyIncomeNum;
-    
-    console.log('Sending update:', updateData); // Debug log
     
     if (Object.keys(updateData).length === 0) {
       toast('No changes to save');
@@ -168,12 +181,46 @@ const Profile: React.FC = () => {
   };
 
   if (!user) {
-    return <div className="p-6">Loading...</div>;
+    return <div className="p-6 text-center">Loading profile...</div>;
   }
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
       <h1 className="text-2xl font-bold text-gray-900 mb-6">Profile Settings</h1>
+
+      {/* Avatar Section */}
+      <div className="card mb-6">
+        <h2 className="text-lg font-semibold mb-4">Profile Picture</h2>
+        <div className="flex items-center gap-6">
+          <div className="w-24 h-24 rounded-full bg-primary-100 flex items-center justify-center overflow-hidden">
+            {avatarPreview ? (
+              <img src={avatarPreview} alt="Avatar" className="w-full h-full object-cover" />
+            ) : (
+              <span className="text-3xl text-primary-600 font-bold">
+                {user.name?.charAt(0).toUpperCase() || 'U'}
+              </span>
+            )}
+          </div>
+          <div>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleAvatarUpload}
+              className="hidden"
+              id="avatar-upload"
+            />
+            <label htmlFor="avatar-upload" className="btn-secondary cursor-pointer inline-block mr-2">
+              📤 Upload
+            </label>
+            {avatarFile && (
+              <button onClick={handleSaveAvatar} className="btn-primary mr-2">
+                Save
+              </button>
+            )}
+            <p className="text-xs text-gray-500 mt-2">JPG, PNG or GIF. Max 2MB.</p>
+          </div>
+        </div>
+      </div>
 
       {/* Profile Information */}
       <div className="card mb-6">
@@ -208,7 +255,6 @@ const Profile: React.FC = () => {
                 className="input"
                 placeholder="+1234567890"
               />
-              <p className="text-xs text-gray-500 mt-1">Format: +1234567890</p>
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">Occupation</label>
@@ -251,42 +297,44 @@ const Profile: React.FC = () => {
                 <option value="Other">Other</option>
               </select>
             </div>
-            <button type="submit" className="btn-primary w-full" disabled={updateProfileMutation.isPending}>
-              {updateProfileMutation.isPending ? 'Saving...' : 'Save Changes'}
-            </button>
+            <div className="flex gap-3">
+              <button type="submit" className="btn-primary flex-1">Save Changes</button>
+              <button type="button" onClick={() => setIsEditing(false)} className="btn-secondary flex-1">Cancel</button>
+            </div>
           </form>
         ) : (
           <div className="space-y-3">
-            <div>
+            <div className="flex justify-between items-center py-2 border-b">
               <p className="text-sm text-gray-500">Name</p>
               <p className="font-medium">{user.name || 'Not set'}</p>
             </div>
-            <div>
+            <div className="flex justify-between items-center py-2 border-b">
               <p className="text-sm text-gray-500">Email</p>
               <p className="font-medium">{user.email}</p>
-              {!user.emailVerified && (
-                <p className="text-xs text-yellow-600 mt-1">Email not verified</p>
-              )}
             </div>
-            <div>
+            <div className="flex justify-between items-center py-2 border-b">
               <p className="text-sm text-gray-500">Phone</p>
               <p className="font-medium">{user.phoneNumber || 'Not set'}</p>
             </div>
-            <div>
+            <div className="flex justify-between items-center py-2 border-b">
               <p className="text-sm text-gray-500">Occupation</p>
               <p className="font-medium">{user.occupation || 'Not set'}</p>
             </div>
-            <div>
+            <div className="flex justify-between items-center py-2 border-b">
               <p className="text-sm text-gray-500">Monthly Income</p>
-              <p className="font-medium">
+              <p className="font-medium text-green-600">
                 {user.monthlyIncome ? formatCurrency(user.monthlyIncome, user.currency) : 'Not set'}
               </p>
+            </div>
+            <div className="flex justify-between items-center py-2">
+              <p className="text-sm text-gray-500">Financial Goal</p>
+              <p className="font-medium">{user.financialGoal || 'Not set'}</p>
             </div>
           </div>
         )}
       </div>
 
-      {/* Security Settings - Keep the same as before */}
+      {/* Security Settings */}
       <div className="card mb-6">
         <h2 className="text-lg font-semibold mb-4">Security</h2>
         
@@ -325,20 +373,11 @@ const Profile: React.FC = () => {
             </div>
             <div className="flex gap-3">
               <button type="submit" className="btn-primary flex-1">Change Password</button>
-              <button
-                type="button"
-                onClick={() => setIsChangingPassword(false)}
-                className="btn-secondary flex-1"
-              >
-                Cancel
-              </button>
+              <button type="button" onClick={() => setIsChangingPassword(false)} className="btn-secondary flex-1">Cancel</button>
             </div>
           </form>
         ) : (
-          <button
-            onClick={() => setIsChangingPassword(true)}
-            className="btn-secondary w-full mb-6"
-          >
+          <button onClick={() => setIsChangingPassword(true)} className="btn-secondary w-full mb-6">
             Change Password
           </button>
         )}
@@ -350,24 +389,17 @@ const Profile: React.FC = () => {
               <p className="text-sm text-gray-500">Add an extra layer of security to your account</p>
             </div>
             {user.twoFactorEnabled ? (
-              <button onClick={handleDisable2FA} className="btn-secondary text-sm">
-                Disable 2FA
-              </button>
+              <button onClick={handleDisable2FA} className="btn-secondary text-sm">Disable 2FA</button>
             ) : (
-              <button
-                onClick={() => setup2FAMutation.mutate()}
-                className="btn-primary text-sm"
-                disabled={setup2FAMutation.isPending}
-              >
+              <button onClick={() => setup2FAMutation.mutate()} className="btn-primary text-sm" disabled={setup2FAMutation.isPending}>
                 {setup2FAMutation.isPending ? 'Setting up...' : 'Enable 2FA'}
               </button>
             )}
           </div>
-
           {isSetup2FA && qrCode && (
             <div className="mt-4 p-4 bg-gray-50 rounded-lg">
               <p className="text-sm mb-3">Scan this QR code with Google Authenticator:</p>
-              <img src={qrCode} alt="2FA QR Code" className="mb-3 mx-auto" />
+              <img src={qrCode} alt="2FA QR Code" className="mb-3 mx-auto" style={{ maxWidth: '200px' }} />
               <p className="text-sm mb-2">Enter the 6-digit code from your app:</p>
               <input
                 type="text"
@@ -384,9 +416,7 @@ const Profile: React.FC = () => {
               >
                 {verify2FAMutation.isPending ? 'Verifying...' : 'Verify & Enable'}
               </button>
-              <p className="text-xs text-gray-500 mt-3">
-                Save your backup codes: {backupCodes.join(', ')}
-              </p>
+              <p className="text-xs text-gray-500 mt-3">Save your backup codes: {backupCodes.join(', ')}</p>
             </div>
           )}
         </div>
@@ -396,20 +426,21 @@ const Profile: React.FC = () => {
       <div className="card border-red-200">
         <h2 className="text-lg font-semibold text-red-600 mb-4">Danger Zone</h2>
         <button
-          onClick={() => {
-            if (window.confirm('Are you sure you want to delete your account? This action cannot be undone.')) {
+          onClick={async () => {
+            if (window.confirm('Are you sure you want to delete your account?')) {
               const password = prompt('Enter your password to confirm:');
               if (password) {
-                userService.deleteAccount(password)
-                  .then(async () => {
-                    toast.success('Account deleted');
-                    await logout();
-                  })
-                  .catch((err) => toast.error(err.response?.data?.message || 'Failed to delete account'));
+                try {
+                  await userService.deleteAccount(password);
+                  toast.success('Account deleted');
+                  await logout();
+                } catch (err: any) {
+                  toast.error(err.response?.data?.message || 'Failed to delete account');
+                }
               }
             }
           }}
-          className="bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-lg transition-colors"
+          className="bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-lg"
         >
           Delete Account
         </button>

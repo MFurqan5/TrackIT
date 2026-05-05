@@ -6,7 +6,7 @@ export interface User {
   emailVerified: boolean;
   twoFactorEnabled: boolean;
   subscriptionTier: 'free' | 'premium' | 'enterprise';
-  avatar?: string;
+  avatar?: string | null;  // ← FIXED: Allow null
   phoneNumber?: string;
   dateOfBirth?: string;
   occupation?: string;

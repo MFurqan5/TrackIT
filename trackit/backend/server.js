@@ -3,6 +3,7 @@ const dotenv = require('dotenv');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
+const mongoose = require('mongoose');
 const connectDB = require('./src/config/database');
 const validateEnv = require('./src/config/validateEnv');
 const { generalLimiter } = require('./src/middleware/rateLimiter');

@@ -2,8 +2,13 @@ import api from './api';
 import { User, ApiResponse } from '../types';
 
 export const userService = {
-  getProfile: async () => {
+  getMe: async () => {
     const response = await api.get<ApiResponse<User>>('/auth/me');
+    return response.data;
+  },
+  
+  getProfile: async () => {
+    const response = await api.get<ApiResponse<User>>('/users/profile');
     return response.data;
   },
   
