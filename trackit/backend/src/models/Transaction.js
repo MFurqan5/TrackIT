@@ -296,7 +296,7 @@ transactionSchema.statics.getMonthlySummary = async function(userId, year, month
   const result = await this.aggregate([
     {
       $match: {
-        user: mongoose.Types.ObjectId(userId),
+        user: new mongoose.Types.ObjectId(userId),
         date: { $gte: startDate, $lte: endDate },
         isDeleted: false
       }
@@ -325,7 +325,7 @@ transactionSchema.statics.getCategoryBreakdown = async function(userId, year, mo
   return await this.aggregate([
     {
       $match: {
-        user: mongoose.Types.ObjectId(userId),
+        user: new mongoose.Types.ObjectId(userId),
         date: { $gte: startDate, $lte: endDate },
         type: 'expense',
         isDeleted: false
@@ -353,7 +353,7 @@ transactionSchema.statics.getDailyTrend = async function(userId, year, month) {
   return await this.aggregate([
     {
       $match: {
-        user: mongoose.Types.ObjectId(userId),
+        user: new mongoose.Types.ObjectId(userId),
         date: { $gte: startDate, $lte: endDate },
         type: 'expense',
         isDeleted: false
@@ -375,7 +375,7 @@ transactionSchema.statics.getDailyTrend = async function(userId, year, month) {
 // Search transactions
 transactionSchema.statics.search = async function(userId, query, options = {}) {
   const searchConditions = {
-    user: mongoose.Types.ObjectId(userId),
+    user: new mongoose.Types.ObjectId(userId),
     isDeleted: false,
     $or: [
       { description: { $regex: query, $options: 'i' } },

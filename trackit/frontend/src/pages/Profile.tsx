@@ -125,13 +125,46 @@ const Profile: React.FC = () => {
     }
   };
 
-  const handleSaveAvatar = () => {
-    if (avatarFile && user) {
-      const localAvatarUrl = avatarPreview;
-      const updatedUser = { ...user, avatar: localAvatarUrl };
-      updateUser(updatedUser);
+  const uploadAvatarMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append('avatar', file); // Make sure 'avatar' matches your backend's expected field name
+
+      try {
+        const response = await fetch(`${process.env.REACT_APP_API_URL}/users/avatar`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+          },
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.message || 'Server error during upload');
+        }
+        return await response.json();
+      } catch (error: any) {
+        if (error.message === 'Failed to fetch') {
+          throw new Error('Connection lost! Your backend server likely crashed. Check your Node.js terminal.');
+        }
+        throw error;
+      }
+    },
+    onSuccess: async () => {
+      await refetchUser();
       toast.success('Profile picture updated!');
       setAvatarFile(null);
+    },
+    onError: (error: any) => {
+      toast.error(error.message || 'Failed to upload avatar');
+      setAvatarPreview(user?.avatar || null); // Revert to original avatar on error
+    },
+  });
+
+  const handleSaveAvatar = () => {
+    if (avatarFile) {
+      uploadAvatarMutation.mutate(avatarFile);
     }
   };
 
@@ -213,8 +246,8 @@ const Profile: React.FC = () => {
               📤 Upload
             </label>
             {avatarFile && (
-              <button onClick={handleSaveAvatar} className="btn-primary mr-2">
-                Save
+              <button onClick={handleSaveAvatar} className="btn-primary mr-2" disabled={uploadAvatarMutation.isPending}>
+                {uploadAvatarMutation.isPending ? 'Saving...' : 'Save'}
               </button>
             )}
             <p className="text-xs text-gray-500 mt-2">JPG, PNG or GIF. Max 2MB.</p>

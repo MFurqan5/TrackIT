@@ -1,9 +1,24 @@
-const cloudinary = require('cloudinary').v2;
+const cloudinary = require('cloudinary');
 const multer = require('multer');
+const path = require('path');
 const CloudinaryStorage = require('multer-storage-cloudinary');
 
+require('dotenv').config({ path: path.join(__dirname, '../../.env') });
+
+const requiredCloudinaryConfig = [
+  'CLOUDINARY_CLOUD_NAME',
+  'CLOUDINARY_API_KEY',
+  'CLOUDINARY_API_SECRET'
+];
+
+const missingCloudinaryConfig = requiredCloudinaryConfig.filter((key) => !process.env[key]);
+
+if (missingCloudinaryConfig.length > 0) {
+  throw new Error(`Missing Cloudinary environment variables: ${missingCloudinaryConfig.join(', ')}`);
+}
+
 // Configure Cloudinary
-cloudinary.config({
+cloudinary.v2.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET
@@ -38,7 +53,7 @@ const avatarStorage = new CloudinaryStorage({
 });
 
 // Multer upload middleware
-const uploadReceipt = multer({ 
+const uploadReceipt = multer({
   storage: receiptStorage,
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
   fileFilter: (req, file, cb) => {
@@ -51,7 +66,7 @@ const uploadReceipt = multer({
   }
 });
 
-const uploadAvatar = multer({ 
+const uploadAvatar = multer({
   storage: avatarStorage,
   limits: { fileSize: 2 * 1024 * 1024 }, // 2MB limit
   fileFilter: (req, file, cb) => {
@@ -64,4 +79,4 @@ const uploadAvatar = multer({
   }
 });
 
-module.exports = { cloudinary, uploadReceipt, uploadAvatar };
+module.exports = { cloudinary: cloudinary.v2, uploadReceipt, uploadAvatar };

@@ -103,10 +103,34 @@ const deleteAccount = async (req, res) => {
   }
 };
 
+// Upload avatar
+const uploadAvatar = async (req, res) => {
+  try {
+    if (!req.file) {
+      return sendError(res, 'Please upload an image file', 400);
+    }
+
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return sendError(res, 'User not found', 404);
+    }
+
+    // Cloudinary returns the URL in req.file.path
+    user.avatar = req.file.path;
+    await user.save();
+
+    sendSuccess(res, { avatar: user.avatar }, 'Profile picture updated successfully');
+  } catch (error) {
+    console.error('Upload avatar error:', error);
+    sendError(res, 'Failed to upload avatar', 500, error);
+  }
+};
+
 module.exports = {
   getProfile,
   updateProfile,
   changePassword,
   updatePreferences,
-  deleteAccount
+  deleteAccount,
+  uploadAvatar
 };

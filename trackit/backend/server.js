@@ -1,5 +1,10 @@
 const express = require('express');
 const dotenv = require('dotenv');
+const path = require('path');
+
+// Load environment variables before importing modules that read process.env.
+dotenv.config({ path: path.join(__dirname, '.env') });
+
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
@@ -8,13 +13,6 @@ const connectDB = require('./src/config/database');
 const validateEnv = require('./src/config/validateEnv');
 const { generalLimiter } = require('./src/middleware/rateLimiter');
 const { sendError } = require('./src/utils/response');
-const transactionRoutes = require('./src/routes/transactionRoutes');
-const budgetRoutes = require('./src/routes/budgetRoutes');
-const analyticsRoutes = require('./src/routes/analyticsRoutes');
-const userRoutes = require('./src/routes/userRoutes');
-
-// Load environment variables
-dotenv.config();
 
 // Validate environment variables
 validateEnv();
@@ -47,6 +45,10 @@ app.use('/api', generalLimiter); // Apply to all API routes
 
 // API ROUTES
 const authRoutes = require('./src/routes/authRoutes');
+const transactionRoutes = require('./src/routes/transactionRoutes');
+const budgetRoutes = require('./src/routes/budgetRoutes');
+const analyticsRoutes = require('./src/routes/analyticsRoutes');
+const userRoutes = require('./src/routes/userRoutes');
 
 // Versioned API routes
 app.use(`/api/${process.env.API_VERSION}/auth`, authRoutes);
