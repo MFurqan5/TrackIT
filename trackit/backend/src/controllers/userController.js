@@ -115,14 +115,46 @@ const uploadAvatar = async (req, res) => {
       return sendError(res, 'User not found', 404);
     }
 
-    // Cloudinary returns the URL in req.file.path
-    user.avatar = req.file.path;
+    const avatarUrl = req.file.secure_url || req.file.url || req.file.path;
+
+    if (!avatarUrl) {
+      console.error('Cloudinary upload did not return an avatar URL:', req.file);
+      return sendError(res, 'Profile picture uploaded but no image URL was returned', 500);
+    }
+
+    user.avatar = avatarUrl;
+    user.avatarPublicId = req.file.public_id || req.file.filename || user.avatarPublicId;
     await user.save();
 
-    sendSuccess(res, { avatar: user.avatar }, 'Profile picture updated successfully');
+    sendSuccess(res, {
+      avatar: user.avatar,
+      avatarPublicId: user.avatarPublicId
+    }, 'Profile picture updated successfully');
   } catch (error) {
     console.error('Upload avatar error:', error);
     sendError(res, 'Failed to upload avatar', 500, error);
+  }
+};
+
+// Remove avatar
+const removeAvatar = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return sendError(res, 'User not found', 404);
+    }
+
+    user.avatar = null;
+    user.avatarPublicId = null;
+    await user.save();
+
+    sendSuccess(res, {
+      avatar: user.avatar,
+      avatarPublicId: user.avatarPublicId
+    }, 'Profile picture removed successfully');
+  } catch (error) {
+    console.error('Remove avatar error:', error);
+    sendError(res, 'Failed to remove avatar', 500, error);
   }
 };
 
@@ -132,5 +164,6 @@ module.exports = {
   changePassword,
   updatePreferences,
   deleteAccount,
-  uploadAvatar
+  uploadAvatar,
+  removeAvatar
 };

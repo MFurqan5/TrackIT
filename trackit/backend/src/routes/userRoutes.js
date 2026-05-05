@@ -5,7 +5,8 @@ const {
   changePassword,
   updatePreferences,
   deleteAccount,
-  uploadAvatar
+  uploadAvatar,
+  removeAvatar
 } = require('../controllers/userController');
 const { protect } = require('../middleware/auth');
 const { uploadAvatar: avatarUploadMiddleware } = require('../config/cloudinary');
@@ -21,5 +22,6 @@ router.post('/change-password', changePassword);
 router.put('/preferences', updatePreferences);
 router.delete('/account', deleteAccount);
 router.post('/avatar', avatarUploadMiddleware.single('avatar'), uploadAvatar);
+router.delete('/avatar', removeAvatar);
 
 module.exports = router;

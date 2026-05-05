@@ -151,7 +151,14 @@ const Profile: React.FC = () => {
         throw error;
       }
     },
-    onSuccess: async () => {
+    onSuccess: async (response) => {
+      const uploadedAvatar = response?.data?.avatar;
+
+      if (uploadedAvatar && user) {
+        updateUser({ ...user, avatar: uploadedAvatar });
+        setAvatarPreview(uploadedAvatar);
+      }
+
       await refetchUser();
       toast.success('Profile picture updated!');
       setAvatarFile(null);
@@ -162,10 +169,37 @@ const Profile: React.FC = () => {
     },
   });
 
+  const removeAvatarMutation = useMutation({
+    mutationFn: () => userService.removeAvatar(),
+    onSuccess: async () => {
+      if (user) {
+        updateUser({ ...user, avatar: null });
+      }
+
+      setAvatarFile(null);
+      setAvatarPreview(null);
+      await refetchUser();
+      toast.success('Profile picture removed!');
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to remove avatar');
+    },
+  });
+
   const handleSaveAvatar = () => {
     if (avatarFile) {
       uploadAvatarMutation.mutate(avatarFile);
     }
+  };
+
+  const handleRemoveAvatar = () => {
+    if (avatarFile && !user?.avatar) {
+      setAvatarFile(null);
+      setAvatarPreview(null);
+      return;
+    }
+
+    removeAvatarMutation.mutate();
   };
 
   const handleProfileSubmit = (e: React.FormEvent) => {
@@ -243,11 +277,20 @@ const Profile: React.FC = () => {
               id="avatar-upload"
             />
             <label htmlFor="avatar-upload" className="btn-secondary cursor-pointer inline-block mr-2">
-              📤 Upload
+              {avatarPreview ? 'Edit' : 'Upload'}
             </label>
             {avatarFile && (
               <button onClick={handleSaveAvatar} className="btn-primary mr-2" disabled={uploadAvatarMutation.isPending}>
                 {uploadAvatarMutation.isPending ? 'Saving...' : 'Save'}
+              </button>
+            )}
+            {avatarPreview && (
+              <button
+                onClick={handleRemoveAvatar}
+                className="btn-secondary text-red-600 hover:text-red-700 mr-2"
+                disabled={removeAvatarMutation.isPending || uploadAvatarMutation.isPending}
+              >
+                {removeAvatarMutation.isPending ? 'Removing...' : 'Remove'}
               </button>
             )}
             <p className="text-xs text-gray-500 mt-2">JPG, PNG or GIF. Max 2MB.</p>

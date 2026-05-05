@@ -16,6 +16,11 @@ export const userService = {
     const response = await api.put<ApiResponse<User>>('/users/profile', data);
     return response.data;
   },
+
+  removeAvatar: async () => {
+    const response = await api.delete<ApiResponse<{ avatar: null; avatarPublicId: null }>>('/users/avatar');
+    return response.data;
+  },
   
   changePassword: async (currentPassword: string, newPassword: string) => {
     const response = await api.post<ApiResponse<null>>('/users/change-password', {
