@@ -411,9 +411,35 @@ const disableTwoFactor = async (req, res) => {
 };
 
 // ============ GET ME ============
+// Add this to your existing authController.js file
+
+// @desc    Get current user
+// @route   GET /api/v1/auth/me
+// @access  Private
 const getMe = async (req, res) => {
   try {
+    // ✅ IMPORTANT: Get user with ALL fields
     const user = await User.findById(req.user._id).select('-password');
+    
+    console.log('📋 getMe returning user:', {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      phoneNumber: user.phoneNumber,
+      occupation: user.occupation,
+      monthlyIncome: user.monthlyIncome,
+      financialGoal: user.financialGoal,
+      avatar: user.avatar,
+      currency: user.currency,
+      emailVerified: user.emailVerified,
+      twoFactorEnabled: user.twoFactorEnabled,
+      subscriptionTier: user.subscriptionTier
+    });
+    
+    if (!user) {
+      return sendError(res, 'User not found', 404);
+    }
+    
     sendSuccess(res, user, 'User profile retrieved');
   } catch (error) {
     console.error('Get user error:', error);
